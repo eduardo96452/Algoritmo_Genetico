@@ -1,218 +1,224 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-public class Particle
+public class PSO
 {
-    public List<int> position;
-    public List<int> velocity;
-    public double fitness;
+    // Definición de las variables del problema
+    static int n; // número de clientes
+    static int p; // número de hubs
+    static int Q; // capacidad de los hubs
+    static int[,] clientes; // matriz de clientes: [id, x, y, demanda]
+    static List<double[]> todasLasSoluciones = new List<double[]>(); //Lista para guardar todas las soluciones
+    
+    // Definición de las variables del algoritmo PSO
+    static int numParticulas = 3;
+    static int numIteraciones = 1000;
+    static int numMaxSoluciones = 1; // Cambia este valor al número deseado de soluciones
+    static double w = 0.7; // inercia
+    static double c1 = 1.5; // constante de aprendizaje cognitivo
+    static double c2 = 1.5; // constante de aprendizaje social
 
-    public Particle(List<int> position, List<int> velocity)
+    // Mejor solución encontrada
+    static double[] mejorPosicionGlobal;
+    static double mejorValorGlobal = double.MaxValue;
+
+    static void Main(string[] args)
     {
-        this.position = position;
-        this.velocity = velocity;
-        this.fitness = CalculateFitness();
-        Console.WriteLine(fitness.ToString());
+        // Leer datos del archivo
+        LeerDatos("datos2.txt");
+
+        // Inicializar PSO
+        InicializarPSO();
+
+        // Ejecutar PSO
+        EjecutarPSO();
+
+        // Mostrar resultados
+        Console.WriteLine("Mejor solución encontrada:");
+        MostrarSolucion(mejorPosicionGlobal);
+        Console.WriteLine("Valor de la función objetivo: " + mejorValorGlobal);
+        Console.WriteLine("............................................");
+        // Mostrar asignación de clientes a hubs en la mejor solución
+        Console.WriteLine("Asignación de clientes a hubs en la mejor solución encontrada:");
+        var asignacion = AsignacionClientesHub(mejorPosicionGlobal);
+        foreach (var kvp in asignacion)
+        {
+            Console.WriteLine($"Hub {kvp.Key + 1}: {string.Join(", ", kvp.Value.Select(x => x + 1))}");
+        }
+        Console.WriteLine("............................................");
+        // Mostrar todas las soluciones encontradas
+        Console.WriteLine("\nTodas las soluciones encontradas:");
+        for (int i = 0; i < todasLasSoluciones.Count; i++)
+        {
+            Console.WriteLine($"Solución {i + 1}:");
+            MostrarSolucion(todasLasSoluciones[i], FuncionObjetivo(todasLasSoluciones[i]));
+        }
     }
 
-    public double CalculateFitness()
+    static void MostrarSolucion(double[] solucion, double valorFuncionObjetivo)
     {
-        // Inicializar la distancia total como 0
-        double totalDistance = 0;
-
-        // Para cada cliente
-        foreach (var client in Program.clients)
-        {
-            double minDistance = double.MaxValue;
-
-            // Encontrar el servidor más cercano al cliente
-            foreach (var server in Program.servers)
-            {
-                double distance = Program.Distance(client, server);
-                if (distance < minDistance)
-                {
-                    minDistance = distance;
-                }
-            }
-
-            // Sumar la distancia mínima al total
-            totalDistance += minDistance;
-        }
-
-        // Penalizar soluciones no factibles
-        foreach (var server in Program.servers)
-        {
-            int capacity = server[3]; // Capacidad del servidor
-            int demand = 0;
-
-            // Calcular la demanda total de los clientes asignados a este servidor
-            foreach (var assignedClientIndex in position)
-            {
-                List<int> assignedClient = Program.clients[assignedClientIndex - 1]; // -1 para obtener el índice correcto
-                if (assignedClient[0] == server[0]) // Si el servidor es asignado a esta partícula
-                {
-                    demand += assignedClient[3]; // Sumar la demanda del cliente
-                }
-            }           
-
-            // Si la demanda excede la capacidad, penalizar la solución
-            if (demand > capacity)
-            {
-                totalDistance += 1000; // Valor de penalización arbitrario
-            }
-        }
-
-        return totalDistance;
-    }    
-}
-
-public class Program
-{
-    public static List<List<int>> clients;
-    public static List<List<int>> servers;
-    public static int p;
-
-    public static void Main(string[] args)
-    {
-        string[] lines = File.ReadAllLines("datos.txt");
-        string[] firstLine = lines[0].Split(' ');
-        int n = int.Parse(firstLine[0]); // Número de clientes
-        p = int.Parse(firstLine[1]); // Número de servidores
-        int capacity = int.Parse(firstLine[2]); // Capacidad de cada servidor
-
-        clients = new List<List<int>>();
-        servers = new List<List<int>>();
-
-        for (int i = 1; i <= n; i++)
-        {
-            string[] parts = lines[i].Split(' ');
-            List<int> client = new List<int>();
-            for (int j = 1; j < parts.Length; j++)
-            {
-                client.Add(int.Parse(parts[j]));
-            }
-            clients.Add(client);
-        }
-
-        for (int i = n + 1; i < lines.Length; i++)
-        {
-            string[] parts = lines[i].Split(' ');
-            List<int> server = new List<int>();
-            for (int j = 1; j < parts.Length; j++)
-            {
-                server.Add(int.Parse(parts[j]));
-            }
-            servers.Add(server);
-        }
-
-        // PSO
-        int numParticles = 20; //Numero de soluciones que dara el programa
-        int numIterations = 100;
-        List<Particle> swarm = InitializeSwarm(numParticles);
-
-        Particle globalBest = swarm[0];
-        foreach (var particle in swarm)
-        {
-            if (particle.fitness < globalBest.fitness)
-            {
-                globalBest = particle;
-            }
-        }
-
-        for (int iteration = 0; iteration < numIterations; iteration++)
-        {
-            foreach (var particle in swarm)
-            {
-                UpdateVelocity(particle, globalBest);
-                UpdatePosition(particle);
-                particle.fitness = particle.CalculateFitness();
-            }
-
-            foreach (var particle in swarm)
-            {
-                if (particle.fitness < globalBest.fitness)
-                {
-                    globalBest = particle;
-                }
-            }
-        }
-
         
-        Console.WriteLine("Global best solution:");
-        Console.WriteLine("Position: " + string.Join(", ", globalBest.position));
-        Console.WriteLine("Fitness: " + globalBest.fitness);
+        for (int i = 0; i < p; i++)
+        {
+            Console.WriteLine($"Hub {i + 1}: ({solucion[i * 2]}, {solucion[i * 2 + 1]})");
+        }
+        Console.WriteLine("Valor de la función objetivo: " + valorFuncionObjetivo);
+        Console.WriteLine("...........................");
     }
 
-    public static List<Particle> InitializeSwarm(int numParticles)
+    static void MostrarSolucion(double[] solucion)
     {
-        Random rand = new Random();
-        List<Particle> swarm = new List<Particle>();
-
-        for (int i = 0; i < numParticles; i++)
+        for (int i = 0; i < p; i++)
         {
-            List<int> position = new List<int>();
-            List<int> velocity = new List<int>();
+            Console.WriteLine($"Hub {i + 1}: ({solucion[i * 2]}, {solucion[i * 2 + 1]})");
+        }
+    }
 
+    static Dictionary<int, List<int>> AsignacionClientesHub(double[] posicion)
+    {
+        Dictionary<int, List<int>> asignacion = new Dictionary<int, List<int>>();
+
+        // Inicializar asignación
+        for (int i = 0; i < p; i++)
+        {
+            asignacion.Add(i, new List<int>());
+        }
+
+        // Asignar clientes al hub más cercano
+        for (int i = 0; i < n; i++)
+        {
+            double distanciaMinima = double.MaxValue;
+            int hubAsignado = -1;
             for (int j = 0; j < p; j++)
             {
-                position.Add(rand.Next(1, clients.Count + 1)); // Asigna un cliente aleatorio a cada servidor
-                velocity.Add(rand.Next(-1, 2)); // Inicializa la velocidad aleatoriamente
+                double distancia = Distancia(clientes[i, 1], clientes[i, 2], posicion[j * 2], posicion[j * 2 + 1]);
+                if (distancia < distanciaMinima)
+                {
+                    distanciaMinima = distancia;
+                    hubAsignado = j;
+                }
             }
-
-            Particle particle = new Particle(position, velocity);
-            swarm.Add(particle);
+            asignacion[hubAsignado].Add(i);
         }
 
-        return swarm;
+        return asignacion;
     }
 
-    public static void UpdateVelocity(Particle particle, Particle globalBest)
+    static void LeerDatos(string filePath)
     {
-        Random rand = new Random();
-        double w = 0.5; // Inertia weight
-        double c1 = 2; // Cognitive weight
-        double c2 = 2; // Social weight
-
-        for (int i = 0; i < p; i++)
+        string[] lines = File.ReadAllLines(filePath);
+        string[] firstLine = lines[0].Split(' ');
+        n = int.Parse(firstLine[0]);
+        p = int.Parse(firstLine[1]);
+        Q = int.Parse(firstLine[2]);
+        clientes = new int[n, 4];
+        for (int i = 0; i < n; i++)
         {
-            int r1 = rand.Next(0, 2);
-            int r2 = rand.Next(0, 2);
-
-            particle.velocity[i] = (int)(w * particle.velocity[i] +
-                                    c1 * r1 * (globalBest.position[i] - particle.position[i]) +
-                                    c2 * r2 * (particle.position[i] - globalBest.position[i]));
-        }
-    }
-
-    public static void UpdatePosition(Particle particle)
-    {
-        for (int i = 0; i < p; i++)
-        {
-            // Actualiza la posición del servidor sumando la velocidad
-            particle.position[i] += particle.velocity[i];
-
-            // Si la posición excede el número de clientes, se ajusta al rango válido
-            if (particle.position[i] < 1)
+            string[] parts = lines[i + 1].Split(' ');
+            for (int j = 0; j < 4; j++)
             {
-                particle.position[i] = 1;
-            }
-            else if (particle.position[i] > clients.Count)
-            {
-                particle.position[i] = clients.Count;
+                clientes[i, j] = int.Parse(parts[j]);
             }
         }
     }
 
-    public static double Distance(List<int> point1, List<int> point2)
+    static void InicializarPSO()
     {
-        // Distancia euclidiana entre dos puntos
-        double sum = 0;
-        for (int i = 0; i < point1.Count; i++)
+        mejorPosicionGlobal = new double[p * 2]; // Posiciones de los hubs (x, y)
+        var rnd = new Random();
+        for (int i = 0; i < p * 2; i++)
         {
-            sum += Math.Pow(point1[i] - point2[i], 2);
+            mejorPosicionGlobal[i] = rnd.Next(100); // Supongamos un espacio de búsqueda de 0 a 100
         }
-        return Math.Sqrt(sum);
     }
+
+    static void EjecutarPSO()
+    {
+        double[][] particulas = new double[numParticulas][];
+        double[][] velocidades = new double[numParticulas][];
+
+
+        // Inicializar partículas
+        var rnd = new Random();
+        for (int i = 0; i < numParticulas; i++)
+        {
+            particulas[i] = new double[p * 2];
+            velocidades[i] = new double[p * 2];
+            for (int j = 0; j < p * 2; j++)
+            {
+                particulas[i][j] = rnd.Next(100); // Supongamos un espacio de búsqueda de 0 a 100
+                velocidades[i][j] = 0;
+            }
+        }
+
+        for (int iteracion = 0; iteracion < numIteraciones && todasLasSoluciones.Count < numMaxSoluciones; iteracion++)
+        {
+            for (int i = 0; i < numParticulas; i++)
+            {
+                double[] posicionActual = particulas[i];
+                double[] velocidadActual = velocidades[i];
+
+                // Evaluar la función objetivo
+                double valorActual = FuncionObjetivo(posicionActual);
+
+                // Actualizar mejor posición local
+                if (valorActual < mejorValorGlobal)
+                {
+                    mejorValorGlobal = valorActual;
+                    Array.Copy(posicionActual, mejorPosicionGlobal, p * 2);
+                }
+
+                // Agregar solución actual a la lista de todas las soluciones
+                todasLasSoluciones.Add(posicionActual);
+
+                // Actualizar velocidad y posición
+                for (int j = 0; j < p * 2; j++)
+                {
+                    double r1 = rnd.NextDouble();
+                    double r2 = rnd.NextDouble();
+                    velocidadActual[j] = w * velocidadActual[j] +
+                                          c1 * r1 * (mejorPosicionGlobal[j] - posicionActual[j]) +
+                                          c2 * r2 * (mejorPosicionGlobal[j] - posicionActual[j]);
+                    posicionActual[j] += velocidadActual[j];
+
+                    // Limitar posición a un rango válido (0 a 100)
+                    if (posicionActual[j] < 0) posicionActual[j] = 0;
+                    if (posicionActual[j] > 100) posicionActual[j] = 100;
+                }
+
+                // Actualizar partícula
+                particulas[i] = posicionActual;
+                velocidades[i] = velocidadActual;
+            }
+        }
+    }
+
+    static double FuncionObjetivo(double[] posicion)
+    {
+        // Calcular la suma de las distancias de los clientes a los hubs
+        double sumaDistancias = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double distanciaMinima = double.MaxValue;
+            for (int j = 0; j < p; j++)
+            {
+                double distancia = Distancia(clientes[i, 1], clientes[i, 2], posicion[j * 2], posicion[j * 2 + 1]);
+                if (distancia < distanciaMinima)
+                {
+                    distanciaMinima = distancia;
+                }
+            }
+            sumaDistancias += distanciaMinima;
+        }
+
+        // Verificar restricciones de capacidad
+
+        return sumaDistancias;
+    }
+
+    static double Distancia(int x1, int y1, double x2, double y2)
+    {
+        return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
+    }    
 }
