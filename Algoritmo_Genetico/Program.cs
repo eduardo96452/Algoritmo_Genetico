@@ -14,32 +14,58 @@ public class Particle
         this.position = position;
         this.velocity = velocity;
         this.fitness = CalculateFitness();
+        Console.WriteLine(fitness.ToString());
     }
 
     public double CalculateFitness()
     {
+        // Inicializar la distancia total como 0
         double totalDistance = 0;
+
+        // Para cada cliente
         foreach (var client in Program.clients)
         {
-            int closestServerIndex = -1;
             double minDistance = double.MaxValue;
-            for (int i = 0; i < Program.servers.Count; i++)
+
+            // Encontrar el servidor más cercano al cliente
+            foreach (var server in Program.servers)
             {
-                double distance = Program.Distance(client, Program.servers[i]);
-                if (distance < minDistance && !position.Contains(i))
+                double distance = Program.Distance(client, server);
+                if (distance < minDistance)
                 {
                     minDistance = distance;
-                    closestServerIndex = i;
                 }
             }
-            if (closestServerIndex != -1)
+
+            // Sumar la distancia mínima al total
+            totalDistance += minDistance;
+        }
+
+        // Penalizar soluciones no factibles
+        foreach (var server in Program.servers)
+        {
+            int capacity = server[3]; // Capacidad del servidor
+            int demand = 0;
+
+            // Calcular la demanda total de los clientes asignados a este servidor
+            foreach (var assignedClientIndex in position)
             {
-                totalDistance += minDistance;
-                position[closestServerIndex] = closestServerIndex;
+                List<int> assignedClient = Program.clients[assignedClientIndex - 1]; // -1 para obtener el índice correcto
+                if (assignedClient[0] == server[0]) // Si el servidor es asignado a esta partícula
+                {
+                    demand += assignedClient[3]; // Sumar la demanda del cliente
+                }
+            }           
+
+            // Si la demanda excede la capacidad, penalizar la solución
+            if (demand > capacity)
+            {
+                totalDistance += 1000; // Valor de penalización arbitrario
             }
         }
+
         return totalDistance;
-    }
+    }    
 }
 
 public class Program
@@ -52,9 +78,9 @@ public class Program
     {
         string[] lines = File.ReadAllLines("datos.txt");
         string[] firstLine = lines[0].Split(' ');
-        int n = int.Parse(firstLine[0]);
-        p = int.Parse(firstLine[1]);
-        int capacity = int.Parse(firstLine[2]);
+        int n = int.Parse(firstLine[0]); // Número de clientes
+        p = int.Parse(firstLine[1]); // Número de servidores
+        int capacity = int.Parse(firstLine[2]); // Capacidad de cada servidor
 
         clients = new List<List<int>>();
         servers = new List<List<int>>();
@@ -81,7 +107,8 @@ public class Program
             servers.Add(server);
         }
 
-        int numParticles = 20;
+        // PSO
+        int numParticles = 20; //Numero de soluciones que dara el programa
         int numIterations = 100;
         List<Particle> swarm = InitializeSwarm(numParticles);
 
@@ -112,17 +139,9 @@ public class Program
             }
         }
 
+        
         Console.WriteLine("Global best solution:");
-        Console.WriteLine("------------------------------------");
-        for (int i = 0; i < globalBest.position.Count; i++)
-        {
-            Console.WriteLine($"Servidor {i + 1}: Cliente {globalBest.position[i] + 1}");
-            var assignedClients = Program.clients[globalBest.position[i]];
-            Console.WriteLine($"Clientes asignados al Servidor {i + 1}:");
-            Console.WriteLine($"Cliente {assignedClients[0]}");
-            Console.WriteLine(".............................");
-        }
-        Console.WriteLine("------------------------------------");
+        Console.WriteLine("Position: " + string.Join(", ", globalBest.position));
         Console.WriteLine("Fitness: " + globalBest.fitness);
     }
 
@@ -138,8 +157,8 @@ public class Program
 
             for (int j = 0; j < p; j++)
             {
-                position.Add(-1); // Inicializa con -1 para representar que ningún cliente ha sido asignado aún
-                velocity.Add(rand.Next(-1, 2));
+                position.Add(rand.Next(1, clients.Count + 1)); // Asigna un cliente aleatorio a cada servidor
+                velocity.Add(rand.Next(-1, 2)); // Inicializa la velocidad aleatoriamente
             }
 
             Particle particle = new Particle(position, velocity);
@@ -169,23 +188,26 @@ public class Program
 
     public static void UpdatePosition(Particle particle)
     {
-        Random rand = new Random();
-
         for (int i = 0; i < p; i++)
         {
-            if (rand.NextDouble() < 0.5) // Probabilidad de 0.5 de moverse
+            // Actualiza la posición del servidor sumando la velocidad
+            particle.position[i] += particle.velocity[i];
+
+            // Si la posición excede el número de clientes, se ajusta al rango válido
+            if (particle.position[i] < 1)
             {
-                particle.position[i] += particle.velocity[i];
-                if (particle.position[i] < 0 || particle.position[i] >= clients.Count)
-                {
-                    particle.position[i] = rand.Next(0, clients.Count);
-                }
+                particle.position[i] = 1;
+            }
+            else if (particle.position[i] > clients.Count)
+            {
+                particle.position[i] = clients.Count;
             }
         }
     }
 
     public static double Distance(List<int> point1, List<int> point2)
     {
+        // Distancia euclidiana entre dos puntos
         double sum = 0;
         for (int i = 0; i < point1.Count; i++)
         {
